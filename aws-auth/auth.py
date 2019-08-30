@@ -95,6 +95,12 @@ async def main():
     # saml profile (affects subsequent CLI calls)
     outputformat = os.environ.get('AWS_OUTPUT_FORMAT')
 
+    # See if a profile name was passed into the routine - if not then use default
+    if len(sys.argv) > 1:
+        profile = sys.argv[1]
+    else:
+        profile = "default"
+
     # awsconfigfile: The file where this script will store the temp
     # credentials under the saml profile
     awsconfigfile = '/.aws/credentials'
@@ -120,7 +126,7 @@ async def main():
 
     browser = await launch(
         headless=True,
-        executablePath="/usr/bin/chromium-browser",
+        executablePath="/usr/bin/chromium",
         args=['--no-sandbox', '--disable-gpu']
     )
     page = await browser.newPage()
@@ -204,9 +210,12 @@ async def main():
     conn = boto.sts.connect_to_region(region)
     token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
 
-    config.set('default', 'aws_access_key_id', token.credentials.access_key)
-    config.set('default', 'aws_secret_access_key', token.credentials.secret_key)
-    config.set('default', 'aws_session_token', token.credentials.session_token)
+    if not config.has_section(profile):
+        config.add_section(profile)
+        config.set(profile, 'region', region)
+    config.set(profile, 'aws_access_key_id', token.credentials.access_key)
+    config.set(profile, 'aws_secret_access_key', token.credentials.secret_key)
+    config.set(profile, 'aws_session_token', token.credentials.session_token)
 
     # Write the updated config file
     with open(filename, 'w+') as configfile:
@@ -214,7 +223,7 @@ async def main():
 
     # Give the user some basic info as to what has just happened
     print('\n\n----------------------------------------------------------------')
-    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the default profile.'.format(filename))
+    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the {1} profile.'.format(filename, profile))
     print('\nNote that it will expire at {0}.'.format(token.credentials.expiration))
     print('After that, you may the following command to refresh your access key pair:')
     print('')
