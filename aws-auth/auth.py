@@ -218,7 +218,13 @@ async def main():
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region)
-    token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
+
+    # Try longer lifetime but fall back to the shorter lifetime in case
+    # the role only accepts the shorter lifetime
+    try:
+      token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=36000)
+    except:
+      token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
 
     if not config.has_section(profile):
         config.add_section(profile)
