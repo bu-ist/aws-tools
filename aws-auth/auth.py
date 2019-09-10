@@ -12,6 +12,50 @@ import asyncio
 import re
 from pyppeteer import launch
 from pyppeteer.errors import TimeoutError, NetworkError
+from html.parser import HTMLParser
+
+# Global mapping from account number to account name.  Built by parsing div tags in source to find account names and numbers.
+# SAML return only gives us the numbers, not the actual associated name.  Having name helps people understand which is which.
+accountname = {}
+
+
+class MyHTMLParser(HTMLParser):
+    #
+    # Parse through the HTML looking for div tag entries that have the account name and number.
+    # We will build a (global) dictionary for this to map the names so we can display useful info.
+    # Example:
+    #      <div class="saml-account-name">Account: ist-cloud-central-app-nprd (770203350335)</div>
+    # gives:
+    #      accountname{'770203350335' : 'ist-cloud-central-app-nprd'}
+    #
+
+    # Flag that indicates we are looking in an interesting div entry that has account details
+    processing_account_div = False
+
+    # Callback whenever we see a tag in the HTML
+    def handle_starttag(self,tag,attrs):
+        # We only care about looking at div tags
+        if (tag == "div"):
+            for attr in attrs:
+                # attrs is a list of attribute tuples (name,value)
+                # Look only for the one with class of saml-account-name
+                # Set flag so that during handle_data callback we save the value in the data part
+                if (attr[0] == "class" and attr[1] == "saml-account-name"):
+                    MyHTMLParser.processing_account_div = True
+    # Callback for all data between tags.  We only care about data if we previously set the flag
+    def handle_data(self,data):
+        global accountname
+        if (MyHTMLParser.processing_account_div == True):
+            # print("Found interesting div content {}".format(data))
+            # Pull out content from string
+            # Account: ist-cloud-central-app-nprd (770203350335)
+            #                       1                   2
+            match = re.search(r'Account:\s+(\S+)\s+\((\d+)\)',data)
+            if (match):
+                accountname[match.group(2)] = match.group(1)
+            # Set flag so that we no longer care about content (until we get another div match)
+            MyHTMLParser.processing_account_div = False
+ 
 
 async def basic_auth(page):
     error = await page.querySelector('.error-box')
@@ -167,6 +211,10 @@ async def main():
     samlValueProperty = await samlElement.getProperty('value')
     samlValue = await samlValueProperty.jsonValue()
 
+    # Save the full HTML content of the page.  We will parse this in a little while to get a mapping of
+    # the account number to account name based on the <div> entries we see on the page.
+    pagesource = await page.content()
+
     await browser.close()
 
     # Overwrite and delete the credential variables, just for safety
@@ -174,6 +222,11 @@ async def main():
     password = '##############################################'
     del username
     del password
+
+    # Call HTML parser to look for the <div> tags for the account name and number.  These are stored into the
+    # global dictionary accountname for lookup later.
+    parser = MyHTMLParser()
+    parser.feed(pagesource)
 
     awsroles = []
     root = ET.fromstring(base64.b64decode(samlValue))
@@ -200,7 +253,11 @@ async def main():
         i = 0
         print("Please choose the role you would like to assume:")
         for awsrole in awsroles:
-            print('[', i, ']: ', awsrole.split(',')[0])
+            print('[', i, ']: ', awsrole.split(',')[0],end='')
+            match = re.search("::(\d+):role",awsrole)
+            if (match):
+                print("     (" + accountname[match.group(1)] + ")",end='')
+            print()
             i += 1
         print("Selection: ", end="")
         selectedroleindex = input()
