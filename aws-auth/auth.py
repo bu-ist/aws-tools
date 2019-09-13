@@ -2,6 +2,7 @@ from os.path import expanduser
 import configparser
 import boto.sts
 import boto.s3
+import boto3
 import base64
 import xml.etree.ElementTree as ET
 import getpass
@@ -273,15 +274,25 @@ async def main():
         role_arn = awsroles[0].split(',')[0]
         principal_arn = awsroles[0].split(',')[1]
 
+    role_name = role_arn.split('/')[1]
+
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region)
 
-    # Try longer lifetime but fall back to the shorter lifetime in case
-    # the role only accepts the shorter lifetime
+    # First, retrieve short-living credentials. 15 is the minimal possible session duration
+    token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=15*60)
+    
+    iam_client = boto3.client('iam', aws_access_key_id=token.credentials.access_key, aws_secret_access_key=token.credentials.secret_key, aws_session_token=token.credentials.session_token)
+
+    current_role = iam_client.get_role(RoleName=role_name)
+    max_session_duration = current_role['Role']['MaxSessionDuration']
+
     try:
-      token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=36000)
+        print('')
+        print('Configuring session to last {0} seconds'.format(max_session_duration))
+        token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=max_session_duration)
     except:
-      token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
+        print('Could not set session to be longer than 15 minutes')
 
     if not config.has_section(profile):
         config.add_section(profile)
@@ -295,7 +306,7 @@ async def main():
         config.write(configfile)
 
     # Give the user some basic info as to what has just happened
-    print('\n\n----------------------------------------------------------------')
+    print('\n----------------------------------------------------------------')
     print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the {1} profile.'.format(filename, profile))
     print('\nNote that it will expire at {0}.'.format(token.credentials.expiration))
     print('After that, you may the following command to refresh your access key pair:')
