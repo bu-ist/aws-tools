@@ -19,6 +19,10 @@ To create a temporary session, just run `shib-auth` inside the container:
 docker run --rm -it --volume "$HOME/.aws:/root/.aws" bostonuniversity/aws-tools shib-auth
 ```
 
+Thanks to the `--volume "$HOME/.aws:/root/.aws"` piece, the security token generated
+as the result of this command will be available at `~/.aws/credentials` so you'll be
+able to use AWS CLI commands authenticated as the role you've chosen.
+
 It is suggested to wrap the command above as an alias:
 
 ```bash
