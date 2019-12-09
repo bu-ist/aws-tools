@@ -282,12 +282,11 @@ async def main():
     # First, retrieve short-living credentials. 15 is the minimal possible session duration
     token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=15*60)
     
-    iam_client = boto3.client('iam', aws_access_key_id=token.credentials.access_key, aws_secret_access_key=token.credentials.secret_key, aws_session_token=token.credentials.session_token)
-
-    current_role = iam_client.get_role(RoleName=role_name)
-    max_session_duration = current_role['Role']['MaxSessionDuration']
-
     try:
+        iam_client = boto3.client('iam', aws_access_key_id=token.credentials.access_key, aws_secret_access_key=token.credentials.secret_key, aws_session_token=token.credentials.session_token)
+        current_role = iam_client.get_role(RoleName=role_name)
+        max_session_duration = current_role['Role']['MaxSessionDuration']
+
         print('')
         print('Configuring session to last {0} seconds'.format(max_session_duration))
         token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=max_session_duration)
