@@ -7,3 +7,5 @@ services:
       - ./aws-auth/:/aws-auth/
       - ./bin/:/usr/local/bin/
       - ./code/:/code/
+      - ./root:/root
+    command: tail -F anything

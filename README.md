@@ -126,11 +126,11 @@ To troubleshoot or add new features to this image, use `docker-compose`.
 The first step is to build the image locally:
 
 ```bash
-docker-compose build
+docker-compose up --build --force-recreate
 ```
 
-Then, you can run the container with bash:
+Then, execute bash session in the container:
 
 ```bash
-docker-compose run --rm aws bash
+docker-compose exec aws bash
 ```
