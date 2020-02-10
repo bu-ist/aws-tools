@@ -2,6 +2,7 @@ from os.path import expanduser
 import configparser
 import boto.sts
 import boto.s3
+import boto3
 import base64
 import xml.etree.ElementTree as ET
 import getpass
@@ -124,6 +125,14 @@ async def duo_wait(page, last_message=''):
     except TimeoutError:
         await duo_wait(page, last_message)
 
+def find_file_in_list (list):
+    """find_file_in_list: returns the first file in the list that exists
+        mainly for determining which name to use for chrome
+    """
+    for file in list:
+        if os.path.exists(file):
+            return file
+        
 async def is_duo_available(page):
     return True if await page.querySelector('#duo_iframe') else False
 
@@ -138,6 +147,12 @@ async def main():
     # output format: The AWS CLI output format that will be configured in the
     # saml profile (affects subsequent CLI calls)
     outputformat = os.environ.get('AWS_OUTPUT_FORMAT')
+
+    # See if a profile name was passed into the routine - if not then use default
+    if len(sys.argv) > 1:
+        profile = sys.argv[1]
+    else:
+        profile = "default"
 
     # awsconfigfile: The file where this script will store the temp
     # credentials under the saml profile
@@ -162,9 +177,11 @@ async def main():
         with open(filename, 'w+') as configfile:
             config.write(configfile)
 
+    # determine path to Chrome/Chromium browser
+    browser_path = find_file_in_list( [ '/usr/bin/chromium-browser', '/usr/bin/chromium' ] )
     browser = await launch(
         headless=True,
-        executablePath="/usr/bin/chromium-browser",
+        executablePath=browser_path,
         args=['--no-sandbox', '--disable-gpu']
     )
     page = await browser.newPage()
@@ -257,21 +274,39 @@ async def main():
         role_arn = awsroles[0].split(',')[0]
         principal_arn = awsroles[0].split(',')[1]
 
+    role_name = role_arn.split('/')[1]
+
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region)
-    token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
 
-    config.set('default', 'aws_access_key_id', token.credentials.access_key)
-    config.set('default', 'aws_secret_access_key', token.credentials.secret_key)
-    config.set('default', 'aws_session_token', token.credentials.session_token)
+    # First, retrieve short-living credentials. 15 is the minimal possible session duration
+    token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=15*60)
+    
+    try:
+        iam_client = boto3.client('iam', aws_access_key_id=token.credentials.access_key, aws_secret_access_key=token.credentials.secret_key, aws_session_token=token.credentials.session_token)
+        current_role = iam_client.get_role(RoleName=role_name)
+        max_session_duration = current_role['Role']['MaxSessionDuration']
+
+        print('')
+        print('Configuring session to last {0} seconds'.format(max_session_duration))
+        token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=max_session_duration)
+    except:
+        print('Could not set session to be longer than 15 minutes')
+
+    if not config.has_section(profile):
+        config.add_section(profile)
+        config.set(profile, 'region', region)
+    config.set(profile, 'aws_access_key_id', token.credentials.access_key)
+    config.set(profile, 'aws_secret_access_key', token.credentials.secret_key)
+    config.set(profile, 'aws_session_token', token.credentials.session_token)
 
     # Write the updated config file
     with open(filename, 'w+') as configfile:
         config.write(configfile)
 
     # Give the user some basic info as to what has just happened
-    print('\n\n----------------------------------------------------------------')
-    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the default profile.'.format(filename))
+    print('\n----------------------------------------------------------------')
+    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the {1} profile.'.format(filename, profile))
     print('\nNote that it will expire at {0}.'.format(token.credentials.expiration))
     print('After that, you may the following command to refresh your access key pair:')
     print('')
