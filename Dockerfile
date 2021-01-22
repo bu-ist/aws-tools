@@ -1,4 +1,4 @@
-FROM alpine:3.11.2
+FROM alpine:3.13
 
 # Configure less
 ENV PAGER="less -r"
@@ -29,12 +29,8 @@ RUN set -ex; \
 RUN pip3 install --upgrade \
       pip \
       aws-shell \
-      awsebcli \
       boto==2.49.0 \
-      pyppeteer==0.0.25
-
-# Hand-patch the issue with Network Timeouts, see https://github.com/miyakogi/pyppeteer/pull/160
-RUN sed -i 's/self._url, max_size=None, loop=self._loop)/self._url, max_size=None, loop=self._loop, ping_interval=None, ping_timeout=None)/' /usr/lib/python3.8/site-packages/pyppeteer/connection.py
+      pyppeteer==0.2.5
 
 # Install ecs-cli
 RUN curl -o /usr/local/bin/ecs-cli https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest && chmod u+x /usr/local/bin/ecs-cli
