@@ -18,6 +18,7 @@ RUN set -ex; \
       groff \
       py-pip \
       python3 \
+      py3-bcrypt py3-cryptography py3-pynacl \
       chromium \
       udev \
       ttf-freefont \
@@ -29,6 +30,8 @@ RUN set -ex; \
 RUN pip3 install --upgrade \
       pip \
       aws-shell \
+      awscli \
+      awsebcli \
       boto==2.49.0 \
       pyppeteer==0.2.5
 
