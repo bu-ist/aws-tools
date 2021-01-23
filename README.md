@@ -134,3 +134,16 @@ Then, execute bash session in the container:
 ```bash
 docker-compose exec aws bash
 ```
+
+## Multi-architecture builds
+
+This assumes that you have enabled multi-archecture builds with buildx.  If not then
+see various sources on how to set that up such as:
+
+https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
+
+Once we have a buildx builder we can build and push images to DockerHub by:
+
+```bash
+$ docker buildx build -t "org/aws-tools:latest" --platform linux/amd64,linux/arm64 --push .
+```
