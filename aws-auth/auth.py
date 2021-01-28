@@ -151,13 +151,18 @@ async def main():
     config = configparser.ConfigParser()
     config.read(filename)
 
+    # The only command line argument is the profile to use
+    aws_profile = 'default'
+    if len(sys.argv) > 1:
+      aws_profile = sys.argv[1]
+
     # If aws config doesn't exist, create one because boto requires it
-    if not config.has_section('default'):
-        config.add_section('default')
-        config.set('default', 'output', outputformat)
-        config.set('default', 'region', region)
-        config.set('default', 'aws_access_key_id', '')
-        config.set('default', 'aws_secret_access_key', '')
+    if not config.has_section(aws_profile):
+        config.add_section(aws_profile)
+        config.set(aws_profile, 'output', outputformat)
+        config.set(aws_profile, 'region', region)
+        config.set(aws_profile, 'aws_access_key_id', '')
+        config.set(aws_profile, 'aws_secret_access_key', '')
         # Write the updated config file
         with open(filename, 'w+') as configfile:
             config.write(configfile)
@@ -262,12 +267,12 @@ async def main():
         principal_arn = awsroles[0].split(',')[1]
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
-    conn = boto.sts.connect_to_region(region)
+    conn = boto.sts.connect_to_region(region, profile_name=aws_profile)
     token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
 
-    config.set('default', 'aws_access_key_id', token.credentials.access_key)
-    config.set('default', 'aws_secret_access_key', token.credentials.secret_key)
-    config.set('default', 'aws_session_token', token.credentials.session_token)
+    config.set(aws_profile, 'aws_access_key_id', token.credentials.access_key)
+    config.set(aws_profile, 'aws_secret_access_key', token.credentials.secret_key)
+    config.set(aws_profile, 'aws_session_token', token.credentials.session_token)
 
     # Write the updated config file
     with open(filename, 'w+') as configfile:
@@ -275,7 +280,7 @@ async def main():
 
     # Give the user some basic info as to what has just happened
     print('\n\n----------------------------------------------------------------')
-    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the default profile.'.format(filename))
+    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the {1} profile.'.format(filename, aws_profile))
     print('\nNote that it will expire at {0}.'.format(token.credentials.expiration))
     print('After that, you may the following command to refresh your access key pair:')
     print('')
