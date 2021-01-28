@@ -55,7 +55,7 @@ class MyHTMLParser(HTMLParser):
                 accountname[match.group(2)] = match.group(1)
             # Set flag so that we no longer care about content (until we get another div match)
             MyHTMLParser.processing_account_div = False
- 
+
 
 async def basic_auth(page):
     error = await page.querySelector('.error-box')
@@ -237,11 +237,15 @@ async def main():
         i = 0
         print("Please choose the role you would like to assume:")
         for awsrole in awsroles:
-            print('[', i, ']: ', awsrole.split(',')[0],end='')
-            match = re.search("::(\d+):role",awsrole)
-            if (match):
-                print("     (" + accountname[match.group(1)] + ")",end='')
-            print()
+            role_str = awsrole.split(',', 2)[0]
+            role_expanded = role_str.split(':', 5)
+            role_account = role_expanded[4]
+            role_name = role_expanded[5]
+            if '/' in role_name:
+              label = role_name.split('/', 2)[1]
+            else:
+              label = role_str
+            print('[%d]: %s    %s' % (i, accountname.get(role_account, role_account), label) )
             i += 1
         print("Selection: ", end="")
         selectedroleindex = input()
