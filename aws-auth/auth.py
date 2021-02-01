@@ -55,7 +55,7 @@ class MyHTMLParser(HTMLParser):
                 accountname[match.group(2)] = match.group(1)
             # Set flag so that we no longer care about content (until we get another div match)
             MyHTMLParser.processing_account_div = False
- 
+
 
 async def basic_auth(page):
     error = await page.querySelector('.error-box')
@@ -151,13 +151,18 @@ async def main():
     config = configparser.ConfigParser()
     config.read(filename)
 
+    # The only command line argument is the profile to use
+    aws_profile = 'default'
+    if len(sys.argv) > 1:
+      aws_profile = sys.argv[1]
+
     # If aws config doesn't exist, create one because boto requires it
-    if not config.has_section('default'):
-        config.add_section('default')
-        config.set('default', 'output', outputformat)
-        config.set('default', 'region', region)
-        config.set('default', 'aws_access_key_id', '')
-        config.set('default', 'aws_secret_access_key', '')
+    if not config.has_section(aws_profile):
+        config.add_section(aws_profile)
+        config.set(aws_profile, 'output', outputformat)
+        config.set(aws_profile, 'region', region)
+        config.set(aws_profile, 'aws_access_key_id', '')
+        config.set(aws_profile, 'aws_secret_access_key', '')
         # Write the updated config file
         with open(filename, 'w+') as configfile:
             config.write(configfile)
@@ -237,11 +242,15 @@ async def main():
         i = 0
         print("Please choose the role you would like to assume:")
         for awsrole in awsroles:
-            print('[', i, ']: ', awsrole.split(',')[0],end='')
-            match = re.search("::(\d+):role",awsrole)
-            if (match):
-                print("     (" + accountname[match.group(1)] + ")",end='')
-            print()
+            role_str = awsrole.split(',', 2)[0]
+            role_expanded = role_str.split(':', 5)
+            role_account = role_expanded[4]
+            role_name = role_expanded[5]
+            if '/' in role_name:
+              label = role_name.split('/', 2)[1]
+            else:
+              label = role_str
+            print('[%d]: %s    %s' % (i, accountname.get(role_account, role_account), label) )
             i += 1
         print("Selection: ", end="")
         selectedroleindex = input()
@@ -258,12 +267,12 @@ async def main():
         principal_arn = awsroles[0].split(',')[1]
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
-    conn = boto.sts.connect_to_region(region)
+    conn = boto.sts.connect_to_region(region, profile_name=aws_profile)
     token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
 
-    config.set('default', 'aws_access_key_id', token.credentials.access_key)
-    config.set('default', 'aws_secret_access_key', token.credentials.secret_key)
-    config.set('default', 'aws_session_token', token.credentials.session_token)
+    config.set(aws_profile, 'aws_access_key_id', token.credentials.access_key)
+    config.set(aws_profile, 'aws_secret_access_key', token.credentials.secret_key)
+    config.set(aws_profile, 'aws_session_token', token.credentials.session_token)
 
     # Write the updated config file
     with open(filename, 'w+') as configfile:
@@ -271,7 +280,7 @@ async def main():
 
     # Give the user some basic info as to what has just happened
     print('\n\n----------------------------------------------------------------')
-    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the default profile.'.format(filename))
+    print('Your new access key pair has been stored in the AWS configuration \nfile ({0}) under the {1} profile.'.format(filename, aws_profile))
     print('\nNote that it will expire at {0}.'.format(token.credentials.expiration))
     print('After that, you may the following command to refresh your access key pair:')
     print('')
