@@ -268,7 +268,19 @@ async def main():
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region, profile_name=aws_profile)
-    token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue)
+    # BU standard is a 8 hour lifespan as passed from Shibboleth to AWS Federated login.  However,
+    # the boto assume_role call will do the lowest of that value and the role's max duration.  
+    # We may not have permission to look at the IAM role for that max duration so we start at 10 hours and keep decrementing
+    # an hour until we get a sucessful call.  
+    token = None
+    duration_seconds = 36000
+    while (token is None and duration_seconds > 0):
+        try:
+            # print("token={0} duration={1}".format(token, duration_seconds))
+            token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=duration_seconds)
+        except:
+            # print("duration={0} did not work".format(duration_seconds))
+            duration_seconds = duration_seconds - 3600
 
     config.set(aws_profile, 'aws_access_key_id', token.credentials.access_key)
     config.set(aws_profile, 'aws_secret_access_key', token.credentials.secret_key)
