@@ -250,7 +250,7 @@ async def main():
         print("Please choose the role you would like to assume:")
         for role_label in aws_role_list:
             (role_account, role_name) = role_label.split("/")
-            print('[%d]: %s    %s' % (i, role_account, role_name) )
+            print('[%d]: %s    %s   [%d]' % (i, role_account, role_name, i) )
             i += 1
         print("Selection: ", end="")
         selectedroleindex = input()
@@ -266,7 +266,6 @@ async def main():
 
     role_arn = awsroles[role_label][0]
     principal_arn = awsroles[role_label][1]
-    print("role: {0} principal={1}".format(role_arn, principal_arn))
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region, profile_name=aws_profile)
@@ -278,13 +277,20 @@ async def main():
     duration_seconds = 36000
     while (token is None and duration_seconds > 0):
         try:
-            print("about to make call with role={0} provider={1} saml={2}".format(role_arn, principal_arn, samlValue))
+            # print("about to make call with role={0} provider={1} saml={2}".format(role_arn, principal_arn, samlValue))
             token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=duration_seconds)
-            print("token={0} duration={1}".format(token, duration_seconds))
+            # print("token={0} duration={1}".format(token, duration_seconds))
         except:
             # print("duration={0} did not work".format(duration_seconds))
             duration_seconds = duration_seconds - 3600
 
+    # If we still don't have a token then something really weird has happened
+    if token == None:
+        print("Error getting a token for the service - this has only happened when:")
+        print("1. The AWS account has not been set up for federated login ({0}".format(principal_arn))
+        print("2. The AWS account has not been configured with this role ({0})".format(role_arn))
+        print("3. Internal testing of this authentication script")
+        sys.exit(1)
     config.set(aws_profile, 'aws_access_key_id', token.credentials.access_key)
     config.set(aws_profile, 'aws_secret_access_key', token.credentials.secret_key)
     config.set(aws_profile, 'aws_session_token', token.credentials.session_token)
