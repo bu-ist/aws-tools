@@ -133,7 +133,7 @@ async def is_saml_available(page):
 async def main():
     # region: The default AWS region that this script will connect
     # to for all API calls
-    region = os.environ.get('AWS_REGION')
+    region = os.environ.get('AWS_REGION', "us-east-1")
 
     # output format: The AWS CLI output format that will be configured in the
     # saml profile (affects subsequent CLI calls)
@@ -173,7 +173,7 @@ async def main():
         args=['--no-sandbox', '--disable-gpu']
     )
     page = await browser.newPage()
-    await page.goto(os.environ.get('AWS_LOGIN_URL'))
+    await page.goto(os.environ.get('AWS_LOGIN_URL', 'https://www.bu.edu/awslogin'))
 
     try:
         while not await is_saml_available(page) and await page.querySelector('[name*=email], [name*=name]'):
