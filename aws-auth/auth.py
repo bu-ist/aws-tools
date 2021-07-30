@@ -217,67 +217,70 @@ async def main():
     parser = MyHTMLParser()
     parser.feed(pagesource)
 
-    awsroles = []
+    # We parse the roles into a dictionary keyed by the role_arn - this will make it simple
+    # to sort by the keys.  The value will be the principal_arn to go with it.
+    awsroles = {}
+
     root = ET.fromstring(base64.b64decode(samlValue))
     for saml2attribute in root.iter('{urn:oasis:names:tc:SAML:2.0:assertion}Attribute'):
         if (saml2attribute.get('Name') == 'https://aws.amazon.com/SAML/Attributes/Role'):
             for saml2attributevalue in saml2attribute.iter('{urn:oasis:names:tc:SAML:2.0:assertion}AttributeValue'):
-                awsroles.append(saml2attributevalue.text)
-
-    # Note the format of the attribute value should be role_arn,principal_arn
-    # but lots of blogs list it as principal_arn,role_arn so let's reverse
-    # them if needed
-    for awsrole in awsroles:
-        chunks = awsrole.split(',')
-        if'saml-provider' in chunks[0]:
-            newawsrole = chunks[1] + ',' + chunks[0]
-            index = awsroles.index(awsrole)
-            awsroles.insert(index, newawsrole)
-            awsroles.remove(awsrole)
+                chunks = saml2attributevalue.text.split(',')
+                if 'saml-provider' in chunks[0]:
+                  role_str = chunks[1]
+                  roles_value = (role_str, chunks[0])
+                else:
+                  role_str = chunks[0]
+                  roles_value = (role_str, chunks[1])
+                # now we get the descriptive name for the key
+                role_expanded = role_str.split(':', 5)
+                role_account = role_expanded[4]
+                role_name = role_expanded[5]
+                if '/' in role_name:
+                  role_name = role_name.split('/', 2)[1]
+                label= "{0}/{1}".format( accountname.get(role_account, role_account), role_name )
+                awsroles[label] = roles_value
 
     # If I have more than one role, ask the user which one they want,
     # otherwise just proceed
     print("")
-    if len(awsroles) > 1:
+    aws_role_list = sorted(awsroles.keys())
+    if len(aws_role_list) > 1:
         i = 0
         print("Please choose the role you would like to assume:")
-        for awsrole in awsroles:
-            role_str = awsrole.split(',', 2)[0]
-            role_expanded = role_str.split(':', 5)
-            role_account = role_expanded[4]
-            role_name = role_expanded[5]
-            if '/' in role_name:
-              label = role_name.split('/', 2)[1]
-            else:
-              label = role_str
-            print('[%d]: %s    %s' % (i, accountname.get(role_account, role_account), label) )
+        for role_label in aws_role_list:
+            (role_account, role_name) = role_label.split("/")
+            print('[%d]: %s    %s' % (i, role_account, role_name) )
             i += 1
         print("Selection: ", end="")
         selectedroleindex = input()
 
         # Basic sanity check of input
-        if int(selectedroleindex) > (len(awsroles) - 1):
+        if int(selectedroleindex) > (len(aws_role_list) - 1):
             print('You selected an invalid role index, please try again')
             sys.exit(0)
 
-        role_arn = awsroles[int(selectedroleindex)].split(',')[0]
-        principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
+        role_label = aws_role_list[int(selectedroleindex)]
     else:
-        role_arn = awsroles[0].split(',')[0]
-        principal_arn = awsroles[0].split(',')[1]
+        role_label = aws_role_list[0]
+
+    role_arn = awsroles[role_label][0]
+    principal_arn = awsroles[role_label][1]
+    print("role: {0} principal={1}".format(role_arn, principal_arn))
 
     # Use the assertion to get an AWS STS token using Assume Role with SAML
     conn = boto.sts.connect_to_region(region, profile_name=aws_profile)
     # BU standard is a 8 hour lifespan as passed from Shibboleth to AWS Federated login.  However,
-    # the boto assume_role call will do the lowest of that value and the role's max duration.  
+    # the boto assume_role call will do the lowest of that value and the role's max duration.
     # We may not have permission to look at the IAM role for that max duration so we start at 10 hours and keep decrementing
-    # an hour until we get a sucessful call.  
+    # an hour until we get a sucessful call.
     token = None
     duration_seconds = 36000
     while (token is None and duration_seconds > 0):
         try:
-            # print("token={0} duration={1}".format(token, duration_seconds))
+            print("about to make call with role={0} provider={1} saml={2}".format(role_arn, principal_arn, samlValue))
             token = conn.assume_role_with_saml(role_arn, principal_arn, samlValue, duration_seconds=duration_seconds)
+            print("token={0} duration={1}".format(token, duration_seconds))
         except:
             # print("duration={0} did not work".format(duration_seconds))
             duration_seconds = duration_seconds - 3600
