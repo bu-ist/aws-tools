@@ -38,6 +38,19 @@ been only tested for the `push` method (both manual and automated).
 
 You can modify these environment variables to fine-tune for your own case:
 
+You can also put the credentials into a non-default profile by adding the profile name to
+the end of the command line:
+
+```bash
+docker run --rm -it --volume "$HOME/.aws:/root/.aws" bostonuniversity/aws-tools shib-auth security
+```
+
+or the following if you made the above alias:
+
+```bash
+awslogin security
+```
+
 Variable name        | Default value
 ---------------------|------------------------------
 AWS_REGION           | `us-east-1`
@@ -101,7 +114,6 @@ docker run --rm -it --volume ${PWD}:/code --volume C:\Some\Temporary\Directory:/
 
 - `aws-cli`
 - `aws-shell`
-- `awsebcli`
 - `ecs-cli`
 
 ### Other

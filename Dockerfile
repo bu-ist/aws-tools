@@ -31,7 +31,6 @@ RUN pip3 install --upgrade \
       pip \
       aws-shell \
       awscli \
-      awsebcli \
       boto==2.49.0 \
       pyppeteer==0.2.5
 
